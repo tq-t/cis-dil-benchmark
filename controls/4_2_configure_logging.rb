@@ -88,17 +88,22 @@ control 'cis-dil-benchmark-4.2.1.4' do
   # ryslog default file permissions are '0644'
   # ref: https://www.rsyslog.com/doc/v8-stable/configuration/action/rsconf1_filecreatemode.html
 
-  # /etc/rsyslog.conf Global config should be set
-  # 0640 or more restrictive
+  # /etc/rsyslog.conf Global config should be set 0640 or more restrictive
   describe file('/etc/rsyslog.conf') do
     its('content') { should match(/^\$FileCreateMode\s+0[0-6][0-4]0/) }
   end
 
-  ## individual service config shouldn't overwrite /etc/rsyslog.conf - Legacy
-  rsyslogd_files = command('grep -l ^\$FileCreateMode /etc/rsyslog.d/*.conf').stdout
+  # Accept either legacy or RainerScript include format in /etc/rsyslog.conf
+  describe file('/etc/rsyslog.conf') do
+    its('content') do
+      should match(%r{^\$IncludeConfig\s+/etc/rsyslog\.d/\*\.conf|include\(file="/etc/rsyslog\.d/\*\.conf"})
+    end
+  end
 
+  # Legacy syntax override check in individual service config files
+  rsyslogd_files = command('grep -l ^\$FileCreateMode /etc/rsyslog.d/*.conf 2>/dev/null').stdout
   rsyslogd_files.each_line do |filename|
-    describe file(filename) do
+    describe file(filename.strip) do
       its('content') { should match(/^\$FileCreateMode\s+0[0-6][0-4]0/) }
     end
   end
@@ -106,10 +111,10 @@ control 'cis-dil-benchmark-4.2.1.4' do
   # Check the new RainerScript format in addition to the 'legacy' rsyslog syntax
   # which is documented as 'obsolete'
   # ref: https://www.rsyslog.com/doc/v8-stable/configuration/modules/omfile.html#filecreatemode
-  new_rsyslog_conf = command('grep -orE \'FileCreateMode="[0-7]{4}"\' /etc/rsyslog.*').stdout
+  new_rsyslog_conf = command('grep -orE \'FileCreateMode="[0-7]{4}"\' /etc/rsyslog.* 2>/dev/null').stdout
   new_rsyslog_conf.each_line do |result|
     filename = result.split(':')[0]
-    describe file(filename) do
+    describe file(filename.strip) do
       its('content') { should match(/FileCreateMode="0[0-6][0-4]0"/) }
     end
   end
